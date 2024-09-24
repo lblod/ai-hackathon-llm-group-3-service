@@ -1,2 +1,7 @@
 pypdf
 requests
+langchain
+langchain-openai
+pymupdf
+python-dotenv
+tqdm
