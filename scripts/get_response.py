@@ -110,7 +110,7 @@ def _get_llm_response(user_input):
     pdf_tekst = _lees_pdf(pdf_beheersbeslissing)
     
     # Check if the text is too long
-    if _get_token_length(pdf_tekst) > 30000:
+    if _get_token_length(pdf_tekst) > 80000:
         return "Stel een andere vraag"
     
     # Extract relevant articles
