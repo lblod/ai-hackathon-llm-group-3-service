@@ -1,13 +1,18 @@
-""" This script is a minimal test to:
-- get a beheersplan
-- parse a beheersplan
-- formulate an advice based on the beheersplan and a user-defined query
+""" This Python module contains code to use LLM's to read and analyse legal documentation pertaining to
+Onroerend Erfgoed. Files can be parsed, read, analysed, and summarized, and advice can be formulated based on
+a user query.
+
+For example a user can ask "Can I change the windows?" then, based on provided documentation, the LLM will read the
+document, and formulate an advice based on what's found in the documentation.
+
+A main guard is implemented meaning the module can therefore be ran directly for testing.
 """
 import logging
 import os
 import random
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from typing import List
 
 import fitz
 from dotenv import load_dotenv
@@ -65,7 +70,9 @@ you can simply reply with "No relevant passages identified."
 """
 
 
-def setup_llm():
+def setup_llm() -> AzureChatOpenAI:
+    """ Does Azure setup. """
+
     return AzureChatOpenAI(
         azure_endpoint=AZURE_ENDPOINT,
         azure_deployment=AZURE_DEPLOYMENT,
@@ -73,11 +80,97 @@ def setup_llm():
     )
 
 
-def get_work_query():
+def str_to_doc(content: str, metadata: dict) -> Document:
+    """ Small helper function to convert text to a Langchain document. """
+
+    return Document(page_content=content, metadata=metadata)
+
+
+def parse_pdf(pdf_path: Path) -> Document:
+    """ Parses a given PDF file and returns its content as a Langchain Document instance. """
+
+    # Make sure we are dealing with a pdf
+    if not pdf_path.suffix == ".pdf":
+        raise IOError("Parsing is only supported for pdf files for now...")
+
+    # Load the pdf doc
+    pdf_document = fitz.open(pdf_path)
+    content = ""
+
+    # Iterate through each page
+    for page_num in range(len(pdf_document)):
+        try:
+            page = pdf_document.load_page(page_num)
+            text = page.get_text("text")
+            # TODO: Better to just make a Langchain document per page instead of this hack
+            content += f"[[--PAGE BREAK--]]Page {page_num}\n\n" + text + "\n"
+        except Exception as e:
+            logger.warning(f"There was an issue parsing {pdf_document.name} page "
+                           f"{page_num} and it will be skipped. The error was: {e}")
+
+    # Return the langchain document
+    return str_to_doc(content, {"reference": pdf_path.name})
+
+
+def summarize_relevant_passages(legal_docs: List[Document]) -> List[Document]:
+    """ Makes a summary of what is and what isn't allowed in terms of works. """
+
+    # Inner function to process a single page
+    def _process(page, doc):
+        messages = [SystemMessage(RELEVANT_INFO_PROMPT), HumanMessage(page)]
+        reply = llm.invoke(messages)
+
+        if reply.content.lower().find("no relevant passages") == -1:
+            origin = doc.metadata["reference"] + " " + page.split("\n")[0]
+            logger.debug(f"Relevant mentions found on {origin}")
+            return Document(
+                page_content=reply.content,
+                metadata={"reference": origin}
+            )
+        return None
+
+    # Configure the llm using Azure OpenAI for now...
+    llm = setup_llm()
+
+    # Analyse the relevant documents one by one, page by page
+    relevant_docs = []
+    for doc_nr, doc in enumerate(legal_docs):
+        content = doc.page_content
+        pages = content.split("[[--PAGE BREAK--]]")
+
+        # Parallel execution for speed
+        with ThreadPoolExecutor() as executor:
+            pool = {executor.submit(_process, page, doc): page for page in pages}
+            for future in as_completed(pool):
+                result = future.result()
+                if result:
+                    relevant_docs.append(result)
+
+    return relevant_docs
+
+
+def analyse_relevant_passages(relevant_docs: List[Document], work_query: str) -> Document:
+    """ Analyses a list of Langchain documents, compares to a user query, and generates specific advice. """
+
+    # Configure the llm using Azure OpenAI for now...
+    llm = setup_llm()
+
+    # Formulate advice based on content and query
+    relevant_content = "\n".join([rd.page_content for rd in relevant_docs])
+    messages = [
+        SystemMessage(ANALYSIS_PROMPT + relevant_content),
+        HumanMessage(work_query)]
+    reply = llm.invoke(messages)
+
+    # TODO: add refs and argumentation
+    return Document(page_content=reply.content)
+
+
+def _get_work_query():
     """ Get a random work query for testing. """
 
     random_selector = random.randint(1, 7)
-    random_selector = 6
+    # random_selector = 6
     if random_selector == 1:
         return "Ik wil mijn gevel isoleren"
     elif random_selector == 2:
@@ -94,17 +187,12 @@ def get_work_query():
         return "Ik wil het hele gebouw slopen"
 
 
-def get_approved_beheersplan_docs():
+def _get_approved_beheersplan_docs():
     """ Get random beheersplannen for testing. """
 
     # Select a random project for testing purposes
-    # random_selector = random.randint(1, 3)
-    random_selector = 3
+    random_selector = random.randint(1, 1)
     if random_selector == 1:
-        base_path = Path("../data/beheersplannen/halle")
-    elif random_selector == 2:
-        base_path = Path("../data/beheersplannen/avhp")
-    elif random_selector == 3:
         base_path = Path("../data/beheersplannen/parochiekerk")
     else:
         raise ValueError("Random selector out of range")
@@ -116,7 +204,7 @@ def get_approved_beheersplan_docs():
                 file.stem.lower().find("plan") != -1 and
                 file.stem.lower().find("goed") != -1 and
                 file.stem.lower().find("keur") != -1):
-            logger.debug(f"Approval document: {file}")
+            logger.info(f"Approval document: {file}")
             approved = True
 
     # If approved parse relevant docs
@@ -132,102 +220,24 @@ def get_approved_beheersplan_docs():
         return None
 
 
-def parse_pdf(pdf_path):
-    """ Straight-forward pdf parsing using Pymupdf. """
+def _demo():
+    """ This function is here just for demo/testing purpose and shows what the pipeline could look like applied on
+    one directory containing the 'beheersplannen' for one OE.
 
-    # Make sure we are dealing with a pdf
-    if not pdf_path.suffix == ".pdf":
-        raise IOError("Parsing is only supported for pdf files for now...")
+    This requires having the necessary data available. For now we decided to push 1 example pdf to Github.
+    TODO: Don't push pdf's to Git, but download them automatically locally. """
 
-    # Load the pdf doc
-    pdf_document = fitz.open(pdf_path)
-    content = ""
-
-    # Iterate through each page
-    for page_num in range(len(pdf_document)):
-        try:
-            page = pdf_document.load_page(page_num)
-            text = page.get_text("text")
-            content += f"[[--PAGE BREAK--]]Page {page_num}\n\n" + text + "\n"
-        except Exception:
-            pass
-
-    # Create a LangChain Document
-    langchain_document = Document(
-        page_content=content,
-        metadata={"reference": pdf_path.name}
-    )
-
-    # Return the langchain document
-    return langchain_document
-
-
-def summarize_relevant_passages(beheersplan_docs):
-    """ Makes a summary of what is and what isn't allowed in terms of works. """
-
-    # Configure the llm using Azure OpenAI for now...
-    llm = setup_llm()
-
-    # Inner function to process a single page
-    def _process(page, doc):
-        if len(page) < 10:
-            return None
-
-        messages = [SystemMessage(RELEVANT_INFO_PROMPT), HumanMessage(page)]
-        reply = llm.invoke(messages)
-
-        if reply.content.lower().find("no relevant passages") == -1:
-            origin = doc.metadata["reference"] + " " + page.split("\n")[0]
-            logger.debug(f"Relevant mentions found on {origin}")
-            return Document(
-                page_content=reply.content,
-                metadata={"reference": origin}
-            )
-        return None
-
-    relevant_docs = []
-    for doc_nr, doc in enumerate(beheersplan_docs):
-        content = doc.page_content
-        pages = content.split("[[--PAGE BREAK--]]")
-        num_docs = len(beheersplan_docs)
-
-        with ThreadPoolExecutor() as executor:
-            pool = {executor.submit(_process, page, doc): page for page in pages}
-            for future in as_completed(pool):
-                result = future.result()
-                if result:
-                    relevant_docs.append(result)
-
-    return relevant_docs
-
-
-def analyse_relevant_passages(relevant_docs, work_query):
-    # Configure the llm using Azure OpenAI for now...
-    llm = setup_llm()
-
-    # Formulate advice based on content and query
-    relevant_content = "\n".join([rd.page_content for rd in relevant_docs])
-    messages = [
-        SystemMessage(ANALYSIS_PROMPT + relevant_content),
-        HumanMessage(work_query)]
-    reply = llm.invoke(messages)
-
-    # TODO: add refs and argumentation
-    return reply.content
-
-
-def main():
-    beheersplan_docs = get_approved_beheersplan_docs()
+    beheersplan_docs = _get_approved_beheersplan_docs()
 
     # An approved beheersplan was found
     if beheersplan_docs is not None:
-        logger.debug("Relevant beheersplannen:")
+        logger.info("Relevant beheersplannen:")
         for d in beheersplan_docs:
-            logger.debug("-> " + d.metadata["reference"])
+            logger.info("-> " + d.metadata["reference"])
 
         # Get some dummy work querries to test
-        work_query = get_work_query()
-        logger.debug(f"Work query is: {work_query}")
+        work_query = _get_work_query()
+        logger.info(f"Work query is: {work_query}")
 
         # Extract the relevant content
         relevant_docs = summarize_relevant_passages(beheersplan_docs)
@@ -241,7 +251,7 @@ def main():
         analysis_result = analyse_relevant_passages(relevant_docs, work_query)
         logger.info(f"Relevant passages based on user query {work_query}:"
                     f"\n===========================================================\n"
-                    f"{analysis_result}"
+                    f"{analysis_result.page_content}"
                     f"\n===========================================================\n")
 
     # No approved beheersplan was found
@@ -250,4 +260,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    _demo()
