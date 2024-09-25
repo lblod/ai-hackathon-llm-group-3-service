@@ -89,7 +89,7 @@ def parse_pdf(
         try:
             page = pdf_document.load_page(page_num)
             text = page.get_text("text")
-            content += f"{page_break}Page {page_num}\n\n" + text + "\n"
+            content += f"{page_break}Page {page_num+1}\n\n" + text + "\n"
         except Exception as e:
             logger.warning(f"There was an issue parsing {pdf_document.name} page "
                            f"{page_num} and it will be skipped. The error was: {e}")
@@ -110,41 +110,33 @@ def summarize_documents(
     the property.
 
     Once you have understood the whole document you must return:
-    - allowed works: A list of allowed works for which you need no permit
-    - restrictions: A list of restrictions and obligations that apply to any works to be carried ont on the property
-    - forbidden works: A list of things you are not allowed to do on the property without formal approval
+    - allowed works: A list of allowed works for which you need no permit.
+    - restrictions: A list of restrictions and obligations that apply to any works to be carried ont on the property.
+    - forbidden works: A list of things you are not allowed to do on the property without formal approval.
+    - argumentation: Add argumentation as to why you can or can not do certain things. Make sure to literally quote the
+        documentation in this section.
     
     Make sure to always reply with Markdown and adhere to the following format:
     ### Allowed Works:
     1. **Allowed 1**: Description
     2. **Allowed 2**: Description
     3. **Allowed 3**: Description
+    ...
     
     ### Restrictions:
     1. **Restriction 1**: Description
     2. **Restriction 2**: Description
+    ...
     
     ### Forbidden Works:
     1. **Forbidden 1**: Description
     2. **Forbidden 2**: Description
     3. **Forbidden 3**: Description
     4. **Forbidden 4**: Description
+    ...
     
-    One example output could be:
-    ### Allowed Works:
-    1. **Routine Maintenance**: Regular upkeep and minor repairs that do not alter the structure or appearance of the property.
-    2. **Approved Works**: Any works that have been pre-approved as part of the management plan, as listed in the annex of the plan.
-    3. **Emergency Repairs**: Immediate repairs necessary to prevent further damage to the property, provided they align with the management plan.
-    
-    ### Restrictions:
-    1. **Management Plan Adherence**: All works must adhere to the stipulations and guidelines provided in the approved management plan.
-    2. **Notification of Stakeholders**: If multiple rights holders or users were involved in creating the management plan, they must be notified of its approval as soon as possible.
-    
-    ### Forbidden Works:
-    1. **Unapproved Alterations**: Any modifications, embellishments, or enhancements not listed in the approved management plan require formal approval.
-    2. **Major Structural Changes**: Major structural changes or any works that significantly alter the appearance or integrity of the property without formal approval.
-    3. **Unauthorized Cultural Goods Handling**: Any handling or movement of cultural goods not listed in the approved annex of the management plan requires formal approval.
-    4. **Non-compliant Works**: Any works that do not comply with the guidelines and requirements laid out in the management plan.
+    ### Argumentation:
+    Add argumentation as to why you say that some things are or aren't allowed. Make sure to literally quote the documentation as well.
 
     If you did not find any relevant information for whatever reason you can simply reply with "No relevant passages identified."
     """
@@ -231,13 +223,14 @@ def analyse_documents(
                 advice_docs.append(result)
 
     # Make a nice text
-    advice = ""
+    full_advice = ""
     for ad in advice_docs:
-        advice += ad.page_content
+        advice = ad.page_content
         advice += "\n"
         advice += f"--> REF: {ad.metadata['reference']}"
         advice = re.sub(r'\n+', '\n', advice)
-        advice += "\n\n\n"
+        full_advice += advice
+        full_advice += "\n\n\n"
 
     return advice
 
