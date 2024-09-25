@@ -79,7 +79,7 @@ def parse_pdf(pdf_path: Path) -> Document:
     return str_to_doc(content, {"reference": pdf_path.name})
 
 
-def summarize_relevant_passages(legal_docs: List[Document]) -> List[Document]:
+def summarize_documents(legal_docs: List[Document]) -> List[Document]:
     """ Makes a summary of what is and what isn't allowed in terms of works. """
 
     prompt = """ In what follows you will be provided with legal documentation pertaining to a specific 
@@ -160,7 +160,7 @@ def summarize_relevant_passages(legal_docs: List[Document]) -> List[Document]:
     return relevant_docs
 
 
-def analyse_relevant_passages(relevant_docs: List[Document], work_query: str) -> Document:
+def analyse_documents(legal_docs: List[Document], work_query: str) -> Document:
     """ Analyses a list of Langchain documents, compares to a user query, and generates specific advice. """
 
     prompt = """ You will be provided with legal documentation pertaining to a specific building, monument, site, or 
@@ -171,7 +171,7 @@ def analyse_relevant_passages(relevant_docs: List[Document], work_query: str) ->
     If the works that the user wants to perform are implicitly or explicitly mentioned or covered in the 
     documentation then you must reply with the relevant piece of information.
 
-    If the works that teh user wants to perform are not at all covered by the documentation then 
+    If the works that the user wants to perform are not at all covered by the documentation then 
     you can simply reply with "No relevant passages identified."
     """
 
@@ -263,7 +263,7 @@ def _demo():
         logger.info(f"Work query is: {work_query}")
 
         # Extract the relevant content
-        relevant_docs = summarize_relevant_passages(beheersplan_docs)
+        relevant_docs = summarize_documents(beheersplan_docs)
         relevant_text = "\n".join([rd.page_content for rd in relevant_docs])
         logger.info(f"Summarized beheersplan:"
                     f"\n===========================================================\n"
@@ -271,7 +271,7 @@ def _demo():
                     f"\n===========================================================\n")
 
         # Analyse the relevant content
-        analysis_result = analyse_relevant_passages(relevant_docs, work_query)
+        analysis_result = analyse_documents(relevant_docs, work_query)
         logger.info(f"Relevant passages based on user query {work_query}:"
                     f"\n===========================================================\n"
                     f"{analysis_result.page_content}"
