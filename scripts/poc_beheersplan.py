@@ -1,11 +1,12 @@
 """ This script is a minimal test to:
 - get a beheersplan
 - parse a beheersplan
-- formulate an advise based on the beheersplan and a user-defined query
+- formulate an advice based on the beheersplan and a user-defined query
 """
 import logging
 import os
 import random
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import fitz
@@ -13,7 +14,6 @@ from dotenv import load_dotenv
 from langchain.schema import Document
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import AzureChatOpenAI
-from tqdm import tqdm
 
 # OpenAI api key (will be deactivated after the hackathon, resource cost is monitored)
 load_dotenv()
@@ -77,6 +77,7 @@ def get_work_query():
     """ Get a random work query for testing. """
 
     random_selector = random.randint(1, 7)
+    random_selector = 6
     if random_selector == 1:
         return "Ik wil mijn gevel isoleren"
     elif random_selector == 2:
@@ -88,7 +89,7 @@ def get_work_query():
     elif random_selector == 5:
         return "Ik wil het interieur opfrissen"
     elif random_selector == 6:
-        return "Mag ik de dakgoot uitkuisen"
+        return "Ik wil de muren herplijsteren"
     else:
         return "Ik wil het hele gebouw slopen"
 
@@ -164,29 +165,38 @@ def parse_pdf(pdf_path):
 def summarize_relevant_passages(beheersplan_docs):
     """ Makes a summary of what is and what isn't allowed in terms of works. """
 
-    # TODO: Async
     # Configure the llm using Azure OpenAI for now...
     llm = setup_llm()
 
-    # Analyse page by page and look for relevant passages
+    # Inner function to process a single page
+    def _process(page, doc):
+        if len(page) < 10:
+            return None
+
+        messages = [SystemMessage(RELEVANT_INFO_PROMPT), HumanMessage(page)]
+        reply = llm.invoke(messages)
+
+        if reply.content.lower().find("no relevant passages") == -1:
+            origin = doc.metadata["reference"] + " " + page.split("\n")[0]
+            logger.debug(f"Relevant mentions found on {origin}")
+            return Document(
+                page_content=reply.content,
+                metadata={"reference": origin}
+            )
+        return None
+
     relevant_docs = []
     for doc_nr, doc in enumerate(beheersplan_docs):
         content = doc.page_content
         pages = content.split("[[--PAGE BREAK--]]")
         num_docs = len(beheersplan_docs)
-        for page in tqdm(pages, leave=False, desc=f"Analysing doc {doc_nr + 1}/{num_docs}"):
-            if len(page) < 10:
-                continue
-            messages = [SystemMessage(RELEVANT_INFO_PROMPT), HumanMessage(page)]
-            reply = llm.invoke(messages)
 
-            if reply.content.lower().find("no relevant passages") == -1:
-                origin = doc.metadata["reference"] + " " + page.split("\n")[0]
-                logger.debug(f"Relevant mentions found on {origin}")
-                relevant_docs.append(Document(
-                    page_content=reply.content,
-                    metadata={"reference": origin}
-                ))
+        with ThreadPoolExecutor() as executor:
+            pool = {executor.submit(_process, page, doc): page for page in pages}
+            for future in as_completed(pool):
+                result = future.result()
+                if result:
+                    relevant_docs.append(result)
 
     return relevant_docs
 
