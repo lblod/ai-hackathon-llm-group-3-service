@@ -6,13 +6,10 @@ from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 import requests
 import json
+from hf_local_llm import LocalHFLLM
 
 
 load_dotenv()
-# Set up the Hugging Face Inference API parameters
-API_URL = os.environ["HF_API_ENDPOINT"]
-API_KEY = os.environ["HF_API_KEY"]
-headers = {"Authorization": f"Bearer {API_KEY}"}
 
 
 def _get_llm_response(user_input):
@@ -33,20 +30,12 @@ def _get_llm_response(user_input):
     # This structure is specific to BramVanroy/fietje-2-instruct model
     prompt = f"<|system|>{system_prompt}<|user|>{user_prompt}\ncontext:{context}<|im_start|>assistant"
 
-    # Payload for the API call
-    payload = {
-        "inputs": prompt,
-        "parameters": {
-            "max_new_tokens": 256,
-            "do_sample": True,
-            "temperature": 0.7
-        }
-    }
-    response = requests.post(API_URL, headers=headers, json=payload)
-    return response.json()
+    return llm.request_with_context(prompt, user_prompt, context)
 
 # Initialize the Flask app
 app = Flask(__name__)
+
+llm = LocalHFLLM("BramVanroy/fietje-2-instruct")
 
 @app.route('/get_response', methods=['POST'])
 def get_response():
@@ -56,7 +45,7 @@ def get_response():
     if not user_input:
         return jsonify({'error': 'No user_input provided'}), 400
 
-    response = _get_llm_response(user_input)
+    response = _get_llm_response(llm, user_input)
 
     return jsonify({'response': response[0]["generated_text"]})
 
