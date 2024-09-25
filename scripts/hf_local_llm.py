@@ -13,6 +13,10 @@ class LocalHFLLM:
                               torch_dtype=torch.bfloat16,
                               device_map="auto")
         self.max_new_tokens = max_new_tokens
+        self.do_sample = do_sample
+        self.temperature = temperature
+        self.top_k = top_k
+        self.top_p = top_p
 
     def run(self, messages):
         prompt = model.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
