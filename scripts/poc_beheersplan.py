@@ -105,9 +105,10 @@ def summarize_documents(
     """ Makes a summary of what is and what isn't allowed in terms of works. """
 
     prompt = """ In what follows you will be provided with legal documentation pertaining to a specific 
-    building, monument, site, or similar property. Your task is to thoroughly analyze the document, focussing in 
-    particular on maintenance works, embellishment, modifications, or enhancements that can be carried out on 
-    the property.
+    building, monument, site, or similar property. Your task is to carefully read the document and look for 
+    mentions of obligations or restrictions that pertain to maintenance works, embellishments, modifications,
+    structural changes, or enhancements to the property. Look only for parts that literally mention obligations, 
+    restrictions, and responsabilities and do not make assumptions about what is and what isn't important.
 
     Once you have understood the whole document you must return:
     - allowed works: A list of allowed works for which you need no permit.
@@ -136,7 +137,8 @@ def summarize_documents(
     ...
     
     ### Argumentation:
-    Add argumentation as to why you say that some things are or aren't allowed. Make sure to literally quote the documentation as well.
+    Add argumentation as to why you say that some things are or aren't allowed and make sure to add quotes from the 
+    documentation here as well.
 
     If you did not find any relevant information for whatever reason you can simply reply with "No relevant passages identified."
     """
