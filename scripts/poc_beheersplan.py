@@ -22,7 +22,6 @@ from langchain_openai import AzureChatOpenAI
 
 # OpenAI api key (will be deactivated after the hackathon, resource cost is monitored)
 load_dotenv()
-os.environ["AZURE_OPENAI_API_KEY"] = os.environ["AZURE_OPENAI_API_KEY"]
 AZURE_ENDPOINT = os.environ["AZURE_OPENAI_ENDPOINT"]
 AZURE_DEPLOYMENT = os.environ["AZURE_OPENAI_DEPLOYMENT"]
 AZURE_OPENAI_VERSION = os.environ["AZURE_OPENAI_API_VERSION"]
