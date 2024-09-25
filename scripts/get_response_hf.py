@@ -10,8 +10,9 @@ import json
 
 load_dotenv()
 # Set up the Hugging Face Inference API parameters
-API_URL = "https://api-inference.huggingface.co/models/meta-llama/Meta-Llama-3-8B-Instruct"
-headers = {"Authorization": "Bearer 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"}
+API_URL = os.environ["HF_API_ENDPOINT"]
+API_KEY = os.environ["HF_API_KEY"]
+headers = {"Authorization": f"Bearer {API_KEY}"}
 
 
 def _get_llm_response(user_input):
