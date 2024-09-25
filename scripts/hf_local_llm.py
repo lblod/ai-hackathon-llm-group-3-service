@@ -2,7 +2,7 @@ import torch
 from transformers import pipeline
 
 class LocalHFLLM:
-    def __init__(self, model_name):
+    def __init__(self, model_name="BramVanroy/fietje-2-instruct"):
         self.model = pipeline("text-generation",
                               model=model_name,
                               torch_dtype=torch.bfloat16,
