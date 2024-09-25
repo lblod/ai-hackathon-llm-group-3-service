@@ -189,10 +189,15 @@ def analyse_documents(legal_docs: List[Document], work_query: str) -> Document:
 
 
 def run(documents: List[Document], query: str) -> str:
-    """ Run the AI stack.
+    """ This function is the interface between the microservice implementation code and the AI code.
 
-    documents: List of paths to pdf's
-    query: The user query
+    Args:
+        documents: List of Langchain documents
+        query: The user query
+
+    Returns:
+        An AI response string
+        
     """
     return "This is placeholder response"
 
