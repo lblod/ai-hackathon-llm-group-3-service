@@ -7,3 +7,6 @@ tqdm
 flask
 tiktoken
 PyPDF2
+transformers
+accelerate
+torch
