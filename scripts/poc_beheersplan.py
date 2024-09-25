@@ -10,6 +10,7 @@ A main guard is implemented meaning the module can therefore be ran directly for
 import logging
 import os
 import random
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import List
@@ -185,7 +186,7 @@ def summarize_documents(
 def analyse_documents(
         legal_docs: List[Document],
         work_query: str
-) -> Document:
+) -> str:
     """ Analyses a list of Langchain documents, compares to a user query, and generates specific advice. """
 
     prompt = """ You will be provided with legal documentation pertaining to a specific building, monument, site, or 
@@ -194,24 +195,51 @@ def analyse_documents(
     to check the documentation whether what the user wants to do is allowed or not.
 
     If the works that the user wants to perform are implicitly or explicitly mentioned or covered in the 
-    documentation then you must reply with the relevant piece of information.
+    documentation then you must reply with the relevant piece of information and you must answer in Dutch.
 
     If the works that the user wants to perform are not at all covered by the documentation then 
-    you can simply reply with "No relevant passages identified."
+    you can simply reply with "No relevant passages identified.". In this case you should not answer in Dutch.
     """
+
+    # Inner function to process a single doc
+    def _process(doc, query):
+        messages = [SystemMessage(prompt + "\n" + doc.page_content), HumanMessage(query)]
+        reply = llm.invoke(messages)
+
+        if (reply.content.lower().find("no relevant passages") == -1 and
+                reply.content.lower().find("geen relevante passages") == -1):
+            origin = doc.metadata["reference"]
+            logger.debug(f"Formulating advice for {query} based on {origin}")
+            return Document(
+                page_content=reply.content,
+                metadata={"reference": origin}
+            )
+        return None
 
     # Configure the llm using Azure OpenAI for now...
     llm = setup_llm()
 
-    # Formulate advice based on content and query
-    relevant_content = "\n".join([rd.page_content for rd in legal_docs])
-    messages = [
-        SystemMessage(prompt + relevant_content),
-        HumanMessage(work_query)]
-    reply = llm.invoke(messages)
+    # Analyse the relevant documents one by one, page by page
+    advice_docs = []
 
-    # TODO: PRIO 1 keep track of origin of answer!
-    return Document(page_content=reply.content)
+    # Parallel execution for speed
+    with ThreadPoolExecutor() as executor:
+        pool = {executor.submit(_process, doc, work_query): doc for doc in legal_docs}
+        for future in as_completed(pool):
+            result = future.result()
+            if result:
+                advice_docs.append(result)
+
+    # Make a nice text
+    advice = ""
+    for ad in advice_docs:
+        advice += ad.page_content
+        advice += "\n"
+        advice += f"--> REF: {ad.metadata['reference']}"
+        advice = re.sub(r'\n+', '\n', advice)
+        advice += "\n\n\n"
+
+    return advice
 
 
 def run(
@@ -243,7 +271,7 @@ def run(
     analysis = analyse_documents(summary, work_query=query)
 
     # Return as a string
-    return analysis.page_content
+    return analysis
 
 
 def _get_work_query() -> str:
@@ -319,7 +347,7 @@ def _demo() -> None:
 
         # Run AI stack
         result = run(beheersplan_docs, work_query)
-        logger.info(result)
+        logger.info("\n\n" + result)
 
     # No approved beheersplan was found
     else:
