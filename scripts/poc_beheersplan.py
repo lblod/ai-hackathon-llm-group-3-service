@@ -69,7 +69,7 @@ def parse_pdf(pdf_path: Path) -> Document:
         try:
             page = pdf_document.load_page(page_num)
             text = page.get_text("text")
-            # TODO: Better to just make a Langchain document per page instead of this hack
+            # TODO: PRIO 3 Better to just make a Langchain document per page instead of this hack
             content += f"[[--PAGE BREAK--]]Page {page_num}\n\n" + text + "\n"
         except Exception as e:
             logger.warning(f"There was an issue parsing {pdf_document.name} page "
@@ -179,13 +179,13 @@ def analyse_relevant_passages(relevant_docs: List[Document], work_query: str) ->
     llm = setup_llm()
 
     # Formulate advice based on content and query
-    relevant_content = "\n".join([rd.page_content for rd in relevant_docs])
+    relevant_content = "\n".join([rd.page_content for rd in legal_docs])
     messages = [
         SystemMessage(prompt + relevant_content),
         HumanMessage(work_query)]
     reply = llm.invoke(messages)
 
-    # TODO: add refs and argumentation
+    # TODO: PRIO 1 keep track of origin of answer!
     return Document(page_content=reply.content)
 
 
@@ -248,7 +248,7 @@ def _demo():
     one directory containing the 'beheersplannen' for one OE.
 
     This requires having the necessary data available. For now we decided to push 1 example pdf to Github.
-    TODO: Don't push pdf's to Git, but download them automatically locally. """
+    TODO: PRIO 3 Don't push pdf's to Git, but download them automatically locally. """
 
     beheersplan_docs = _get_approved_beheersplan_docs()
 
