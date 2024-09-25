@@ -46,13 +46,19 @@ def setup_llm() -> AzureChatOpenAI:
     )
 
 
-def str_to_doc(content: str, metadata: dict) -> Document:
+def str_to_doc(
+        content: str,
+        metadata: dict
+) -> Document:
     """ Small helper function to convert text to a Langchain document. """
 
     return Document(page_content=content, metadata=metadata)
 
 
-def parse_pdf(pdf_path: Path) -> Document:
+def parse_pdf(
+        pdf_path: Path,
+        page_break="<div style='break-before:page'></div>"
+) -> Document:
     """ Parses a given PDF file and returns its content as a Langchain Document instance. """
 
     # Make sure we are dealing with a pdf
@@ -68,8 +74,7 @@ def parse_pdf(pdf_path: Path) -> Document:
         try:
             page = pdf_document.load_page(page_num)
             text = page.get_text("text")
-            # TODO: PRIO 3 Better to just make a Langchain document per page instead of this hack
-            content += f"[[--PAGE BREAK--]]Page {page_num}\n\n" + text + "\n"
+            content += f"{page_break}Page {page_num}\n\n" + text + "\n"
         except Exception as e:
             logger.warning(f"There was an issue parsing {pdf_document.name} page "
                            f"{page_num} and it will be skipped. The error was: {e}")
@@ -78,7 +83,10 @@ def parse_pdf(pdf_path: Path) -> Document:
     return str_to_doc(content, metadata={"reference": pdf_path.name})
 
 
-def summarize_documents(legal_docs: List[Document]) -> List[Document]:
+def summarize_documents(
+        legal_docs: List[Document],
+        page_break="<div style='break-before:page'></div>"
+) -> List[Document]:
     """ Makes a summary of what is and what isn't allowed in terms of works. """
 
     prompt = """ In what follows you will be provided with legal documentation pertaining to a specific 
@@ -123,6 +131,7 @@ def summarize_documents(legal_docs: List[Document]) -> List[Document]:
     3. **Unauthorized Cultural Goods Handling**: Any handling or movement of cultural goods not listed in the approved annex of the management plan requires formal approval.
     4. **Non-compliant Works**: Any works that do not comply with the guidelines and requirements laid out in the management plan.
 
+    If you did not find any relevant information for whatever reason you can simply reply with "No relevant passages identified."
     """
 
     # Inner function to process a single page
@@ -146,7 +155,7 @@ def summarize_documents(legal_docs: List[Document]) -> List[Document]:
     relevant_docs = []
     for doc_nr, doc in enumerate(legal_docs):
         content = doc.page_content
-        pages = content.split("[[--PAGE BREAK--]]")
+        pages = content.split(page_break)
 
         # Parallel execution for speed
         with ThreadPoolExecutor() as executor:
@@ -159,7 +168,10 @@ def summarize_documents(legal_docs: List[Document]) -> List[Document]:
     return relevant_docs
 
 
-def analyse_documents(legal_docs: List[Document], work_query: str) -> Document:
+def analyse_documents(
+        legal_docs: List[Document],
+        work_query: str
+) -> Document:
     """ Analyses a list of Langchain documents, compares to a user query, and generates specific advice. """
 
     prompt = """ You will be provided with legal documentation pertaining to a specific building, monument, site, or 
@@ -188,21 +200,39 @@ def analyse_documents(legal_docs: List[Document], work_query: str) -> Document:
     return Document(page_content=reply.content)
 
 
-def run(documents: List[Document], query: str) -> str:
+def run(
+        documents: List[Document],
+        query: str,
+        page_break="<div style='break-before:page'></div>"
+) -> str:
     """ This function is the interface between the microservice implementation code and the AI code.
 
     Args:
-        documents: List of Langchain documents
+        documents: List of Langchain documents. Each Langchain document needs to have a 'reference' field in the
+            metadata. If the document pertains to a multi-page document then pages must be separated in text with
+            the specified page break
         query: The user query
+        page_break: A string to be inserted into the document's page content at the end of each page.
 
     Returns:
         An AI response string
-        
     """
-    return "This is placeholder response"
+
+    # Input validation
+    if not isinstance(documents, List) or any([not isinstance(d, Document) for d in documents]):
+        raise TypeError("Documents is supposed to be a list of Langchain documents")
+
+    # Summarize
+    summary = summarize_documents(documents, page_break=page_break)
+
+    # Analyze
+    analysis = analyse_documents(summary, work_query=query)
+
+    # Return as a string
+    return analysis.page_content
 
 
-def _get_work_query():
+def _get_work_query() -> str:
     """ Get a random work query for testing. """
 
     random_selector = random.randint(1, 7)
@@ -223,7 +253,7 @@ def _get_work_query():
         return "Ik wil het hele gebouw slopen"
 
 
-def _get_approved_beheersplan_docs():
+def _get_approved_beheersplan_docs() -> List[Document]:
     """ Get random beheersplannen for testing. """
 
     # Select a random project for testing purposes
@@ -256,7 +286,7 @@ def _get_approved_beheersplan_docs():
         return None
 
 
-def _demo():
+def _demo() -> None:
     """ This function is here just for demo/testing purpose and shows what the pipeline could look like applied on
     one directory containing the 'beheersplannen' for one OE.
 
@@ -264,31 +294,18 @@ def _demo():
     TODO: PRIO 3 Don't push pdf's to Git, but download them automatically locally. """
 
     beheersplan_docs = _get_approved_beheersplan_docs()
+    work_query = _get_work_query()
 
     # An approved beheersplan was found
     if beheersplan_docs is not None:
+        logger.info(f"Work query is: {work_query}")
         logger.info("Relevant beheersplannen:")
         for d in beheersplan_docs:
             logger.info("-> " + d.metadata["reference"])
 
-        # Get some dummy work querries to test
-        work_query = _get_work_query()
-        logger.info(f"Work query is: {work_query}")
-
-        # Extract the relevant content
-        relevant_docs = summarize_documents(beheersplan_docs)
-        relevant_text = "\n".join([rd.page_content for rd in relevant_docs])
-        logger.info(f"Summarized beheersplan:"
-                    f"\n===========================================================\n"
-                    f"{relevant_text}"
-                    f"\n===========================================================\n")
-
-        # Analyse the relevant content
-        analysis_result = analyse_documents(relevant_docs, work_query)
-        logger.info(f"Relevant passages based on user query {work_query}:"
-                    f"\n===========================================================\n"
-                    f"{analysis_result.page_content}"
-                    f"\n===========================================================\n")
+        # Run AI stack
+        result = run(beheersplan_docs, work_query)
+        logger.info(result)
 
     # No approved beheersplan was found
     else:
