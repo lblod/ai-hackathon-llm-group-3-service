@@ -2,12 +2,14 @@ import os
 from dotenv import load_dotenv
 from typing import List
 from langchain.schema import Document
+import requests
 
 
 load_dotenv()
 API_URL_HF = os.environ["HF_API_ENDPOINT"]
 API_KEY_HF = os.environ["HF_API_KEY"]
 HF_HEADERS = {"Authorization": f"Bearer {API_KEY_HF}"}
+
 
 def get_hf_reply(user_prompt, system_prompt, context):
     prompt = f"<|system|>{system_prompt}<|user|>{user_prompt}\ncontext:{context}<|im_start|>assistant"
