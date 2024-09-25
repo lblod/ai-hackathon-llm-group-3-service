@@ -55,6 +55,20 @@ def str_to_doc(
     return Document(page_content=content, metadata=metadata)
 
 
+def doc_to_str(
+        document: Document,
+        metadata: bool = True
+) -> str:
+    """ Small helper function to convert a Langchain document to text. """
+
+    if not metadata:
+        return document.page_content
+    else:
+        meta = "\nMETADATA:\n"
+        meta += " ".join([k + ": " + document.metadata[k] for k in document.metadata.keys()])
+        return document.page_content + meta
+
+
 def parse_pdf(
         pdf_path: Path,
         page_break="<div style='break-before:page'></div>"
