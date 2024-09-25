@@ -36,39 +36,6 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 ch.setFormatter(formatter)
 logger.addHandler(ch)
 
-# LLM prompts
-RELEVANT_INFO_PROMPT = """
-
-You will be provided with legal documentation pertaining to a specific building, monument, site, or similar property. Your task is to thoroughly analyze the document and determine the following:
-
-Does the document mention any maintenance works, modifications, or enhancements that can be carried out on the property?
-Are there any sections of the property specifically identified as protected within the document?
-Does the document impose any restrictions or prohibitions with regards to the conservation of the property?
-
-Your response should be a set of bullet points summarizing the information. If none of the above points are mentioned in the document, your response should simply be: "No relevant passages identified."
-
-Example output:
-- Maintenance works allowed: interior refurbishment, but color scheme must remain the same.
-- Protected sections: none mentioned.
-- Restrictions: changes to windows not allowed; all maintenance work must be reported to the authorities every 5 years.
-
-You can add other bullet points here, but don't add bullet points that are not covered in the documentation.
-"""
-
-ANALYSIS_PROMPT = """ 
-
-You will be provided with legal documentation pertaining to a specific building, monument, site, or similar property. 
-A user will also provide you with a query about certain works or modifications to be done to the property.
-Your task is to fully understand what implications the works to be done have on the property and 
-to check the documentation whether what the user wants to do is allowed or not.
-
-If the works that the user wants to perform are implicitly or explicitly mentioned or covered in the 
-documentation then you must reply with the relevant piece of information.
-
-If the works that teh user wants to perform are not at all covered by the documentation then 
-you can simply reply with "No relevant passages identified."
-"""
-
 
 def setup_llm() -> AzureChatOpenAI:
     """ Does Azure setup. """
@@ -115,9 +82,53 @@ def parse_pdf(pdf_path: Path) -> Document:
 def summarize_relevant_passages(legal_docs: List[Document]) -> List[Document]:
     """ Makes a summary of what is and what isn't allowed in terms of works. """
 
+    prompt = """ In what follows you will be provided with legal documentation pertaining to a specific 
+    building, monument, site, or similar property. Your task is to thoroughly analyze the document, focussing in 
+    particular on maintenance works, embellishment, modifications, or enhancements that can be carried out on 
+    the property.
+
+    Once you have understood the whole document you must return:
+    - allowed works: A list of allowed works for which you need no permit
+    - restrictions: A list of restrictions and obligations that apply to any works to be carried ont on the property
+    - forbidden works: A list of things you are not allowed to do on the property without formal approval
+    
+    Make sure to always reply with Markdown and adhere to the following format:
+    ### Allowed Works:
+    1. **Allowed 1**: Description
+    2. **Allowed 2**: Description
+    3. **Allowed 3**: Description
+    
+    ### Restrictions:
+    1. **Restriction 1**: Description
+    2. **Restriction 2**: Description
+    
+    ### Forbidden Works:
+    1. **Forbidden 1**: Description
+    2. **Forbidden 2**: Description
+    3. **Forbidden 3**: Description
+    4. **Forbidden 4**: Description
+    
+    One example output could be:
+    ### Allowed Works:
+    1. **Routine Maintenance**: Regular upkeep and minor repairs that do not alter the structure or appearance of the property.
+    2. **Approved Works**: Any works that have been pre-approved as part of the management plan, as listed in the annex of the plan.
+    3. **Emergency Repairs**: Immediate repairs necessary to prevent further damage to the property, provided they align with the management plan.
+    
+    ### Restrictions:
+    1. **Management Plan Adherence**: All works must adhere to the stipulations and guidelines provided in the approved management plan.
+    2. **Notification of Stakeholders**: If multiple rights holders or users were involved in creating the management plan, they must be notified of its approval as soon as possible.
+    
+    ### Forbidden Works:
+    1. **Unapproved Alterations**: Any modifications, embellishments, or enhancements not listed in the approved management plan require formal approval.
+    2. **Major Structural Changes**: Major structural changes or any works that significantly alter the appearance or integrity of the property without formal approval.
+    3. **Unauthorized Cultural Goods Handling**: Any handling or movement of cultural goods not listed in the approved annex of the management plan requires formal approval.
+    4. **Non-compliant Works**: Any works that do not comply with the guidelines and requirements laid out in the management plan.
+
+    """
+
     # Inner function to process a single page
     def _process(page, doc):
-        messages = [SystemMessage(RELEVANT_INFO_PROMPT), HumanMessage(page)]
+        messages = [SystemMessage(prompt), HumanMessage(page)]
         reply = llm.invoke(messages)
 
         if reply.content.lower().find("no relevant passages") == -1:
@@ -152,13 +163,25 @@ def summarize_relevant_passages(legal_docs: List[Document]) -> List[Document]:
 def analyse_relevant_passages(relevant_docs: List[Document], work_query: str) -> Document:
     """ Analyses a list of Langchain documents, compares to a user query, and generates specific advice. """
 
+    prompt = """ You will be provided with legal documentation pertaining to a specific building, monument, site, or 
+    similar property. A user will also provide you with a query about certain works or modifications to be done to the 
+    property. Your task is to fully understand what implications the works to be done have on the property and 
+    to check the documentation whether what the user wants to do is allowed or not.
+
+    If the works that the user wants to perform are implicitly or explicitly mentioned or covered in the 
+    documentation then you must reply with the relevant piece of information.
+
+    If the works that teh user wants to perform are not at all covered by the documentation then 
+    you can simply reply with "No relevant passages identified."
+    """
+
     # Configure the llm using Azure OpenAI for now...
     llm = setup_llm()
 
     # Formulate advice based on content and query
     relevant_content = "\n".join([rd.page_content for rd in relevant_docs])
     messages = [
-        SystemMessage(ANALYSIS_PROMPT + relevant_content),
+        SystemMessage(prompt + relevant_content),
         HumanMessage(work_query)]
     reply = llm.invoke(messages)
 
