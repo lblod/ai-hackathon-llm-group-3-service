@@ -20,11 +20,18 @@ from langchain.schema import Document
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import AzureChatOpenAI
 
+import requests
+
 # OpenAI api key (will be deactivated after the hackathon, resource cost is monitored)
 load_dotenv()
+
 AZURE_ENDPOINT = os.environ["AZURE_OPENAI_ENDPOINT"]
 AZURE_DEPLOYMENT = os.environ["AZURE_OPENAI_DEPLOYMENT"]
 AZURE_OPENAI_VERSION = os.environ["AZURE_OPENAI_API_VERSION"]
+
+API_URL_HF = os.environ["HF_API_ENDPOINT"]
+API_KEY_HF = os.environ["HF_API_KEY"]
+HF_HEADERS = {"Authorization": f"Bearer {API_KEY_HF}"}
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -44,6 +51,21 @@ def setup_llm() -> AzureChatOpenAI:
         azure_deployment=AZURE_DEPLOYMENT,
         openai_api_version=AZURE_OPENAI_VERSION,
     )
+
+
+def get_hf_reply(user_prompt, system_prompt, context):
+    prompt = f"<|system|>{system_prompt}<|user|>{user_prompt}\ncontext:{context}<|im_start|>assistant"
+
+    # Payload for the API call
+    payload = {
+        "inputs": prompt,
+        "parameters": {
+            "do_sample": True,
+            "temperature": 0.7
+        }
+    }
+    response = requests.post(API_URL_HF, headers=HF_HEADERS, json=payload)
+    return response.json()
 
 
 def str_to_doc(
@@ -90,14 +112,15 @@ def summarize_documents(
     """ Makes a summary of what is and what isn't allowed in terms of works. """
 
     prompt = """ In what follows you will be provided with legal documentation pertaining to a specific 
-    building, monument, site, or similar property. Your task is to thoroughly analyze the document, focussing in 
+    building, monument, site, or similar property. The documents will be provided in dutch. Your task is to thoroughly analyze the document, focussing in 
     particular on maintenance works, embellishment, modifications, or enhancements that can be carried out on 
-    the property.
+    the property. Ignore historical restaurations and distructions.
 
     Once you have understood the whole document you must return:
     - allowed works: A list of allowed works for which you need no permit
     - restrictions: A list of restrictions and obligations that apply to any works to be carried ont on the property
     - forbidden works: A list of things you are not allowed to do on the property without formal approval
+    - a clear message formed as "No relevant passages identified" in case nothing is mentioned about the above.
     
     Make sure to always reply with Markdown and adhere to the following format:
     ### Allowed Works:
@@ -131,7 +154,7 @@ def summarize_documents(
     3. **Unauthorized Cultural Goods Handling**: Any handling or movement of cultural goods not listed in the approved annex of the management plan requires formal approval.
     4. **Non-compliant Works**: Any works that do not comply with the guidelines and requirements laid out in the management plan.
 
-    If you did not find any relevant information for whatever reason you can simply reply with "No relevant passages identified."
+    If you did not find any relevant information for whatever reason you can simply reply with "No relevant passages identified"
     """
 
     # Inner function to process a single page
@@ -186,18 +209,15 @@ def analyse_documents(
     you can simply reply with "No relevant passages identified."
     """
 
-    # Configure the llm using Azure OpenAI for now...
-    llm = setup_llm()
-
     # Formulate advice based on content and query
     relevant_content = "\n".join([rd.page_content for rd in legal_docs])
-    messages = [
-        SystemMessage(prompt + relevant_content),
-        HumanMessage(work_query)]
-    reply = llm.invoke(messages)
 
-    # TODO: PRIO 1 keep track of origin of answer!
-    return Document(page_content=reply.content)
+    reply = get_hf_reply(user_prompt=work_query,
+                         system_prompt=prompt,
+                         context=relevant_content)
+
+    print(reply)
+    return Document(page_content=reply[0]["generated_text"])
 
 
 def run(
@@ -259,7 +279,7 @@ def _get_approved_beheersplan_docs() -> List[Document]:
     # Select a random project for testing purposes
     random_selector = random.randint(1, 1)
     if random_selector == 1:
-        base_path = Path("../data/beheersplannen/parochiekerk")
+        base_path = Path("data/beheersplannen/parochiekerk")
     else:
         raise ValueError("Random selector out of range")
 
