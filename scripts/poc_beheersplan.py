@@ -75,7 +75,7 @@ def parse_pdf(pdf_path: Path) -> Document:
                            f"{page_num} and it will be skipped. The error was: {e}")
 
     # Return the langchain document
-    return str_to_doc(content, {"reference": pdf_path.name})
+    return str_to_doc(content, metadata={"reference": pdf_path.name})
 
 
 def summarize_documents(legal_docs: List[Document]) -> List[Document]:
@@ -186,6 +186,15 @@ def analyse_documents(legal_docs: List[Document], work_query: str) -> Document:
 
     # TODO: PRIO 1 keep track of origin of answer!
     return Document(page_content=reply.content)
+
+
+def run(documents: List[Document], query: str) -> str:
+    """ Run the AI stack.
+
+    documents: List of paths to pdf's
+    query: The user query
+    """
+    return "This is placeholder response"
 
 
 def _get_work_query():
