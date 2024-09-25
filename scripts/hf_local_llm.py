@@ -19,16 +19,20 @@ class LocalHFLLM:
         self.top_p = top_p
 
     def run(self, messages):
-        prompt = model.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        prompt = model.tokenizer.apply_chat_template(messages,
+                                                     tokenize=False,
+                                                     add_generation_prompt=True)
         if self.do_sample:
-            outputs = model(prompt,
-                            max_new_tokens=self.max_new_tokens,
-                            do_sample=True,
-                            temperature=self.temperature,
-                            top_k=self.top_k,
-                            top_p=self.top_p)
+            outputs = self.model(prompt,
+                                 max_new_tokens=self.max_new_tokens,
+                                 do_sample=True,
+                                 temperature=self.temperature,
+                                 top_k=self.top_k,
+                                 top_p=self.top_p)
         else:
-            outputs = self.model(prompt, max_new_tokens=self.max_new_tokens, do_sample=False)
+            outputs = self.model(prompt,
+                                 max_new_tokens=self.max_new_tokens,
+                                 do_sample=False)
         full_answer = outputs[0]["generated_text"]
         return full_answer
 
