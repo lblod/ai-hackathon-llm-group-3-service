@@ -272,12 +272,11 @@ def run(
 def _get_work_query() -> str:
     """ Get a random work query for testing. """
 
-    random_selector = random.randint(1, 7)
-    # random_selector = 6
+    random_selector = random.randint(2, 2)
     if random_selector == 1:
-        return "Ik wil mijn gevel isoleren"
+        return "Ik wil de gevel isoleren"
     elif random_selector == 2:
-        return "Mag ik nieuwe ramen zetten"
+        return "Mag ik het dak vernieuwen?"
     elif random_selector == 3:
         return "Ik wil de tuin opnieuw aanleggen"
     elif random_selector == 4:
@@ -294,9 +293,11 @@ def _get_approved_beheersplan_docs() -> List[Document]:
     """ Get random beheersplannen for testing. """
 
     # Select a random project for testing purposes
-    random_selector = random.randint(1, 1)
+    random_selector = random.randint(2, 2)
     if random_selector == 1:
         base_path = Path("../data/beheersplannen/parochiekerk")
+    elif random_selector == 2:
+        base_path = Path("../data/beheersplannen/burgerhuis")
     else:
         raise ValueError("Random selector out of range")
 
